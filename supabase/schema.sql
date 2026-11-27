@@ -409,8 +409,13 @@ begin
       using errcode = '22023', hint = 'VALIDATION_ERROR';
   end if;
 
-  -- integer (whole-rupiah) arithmetic only — no floating point anywhere
-  v_dp        := (v_total * v_settings.dp_percentage) / 100;
+  -- Whole-rupiah arithmetic only. The DP is rounded UP to the nearest Rp 100
+  -- (never under-pay) and capped at the total; js/config.js calcDp() mirrors
+  -- this exactly so the quoted DP equals the stored DP.
+  v_dp := least(
+            (ceil((v_total * v_settings.dp_percentage)::numeric / 10000) * 100)::bigint,
+            v_total
+          );
   v_remaining := v_total - v_dp;
 
   -- ---- create the order (retry on the unlikely order_code collision) ------

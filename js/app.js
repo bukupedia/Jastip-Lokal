@@ -65,7 +65,37 @@ const ApiService = (() => {
     return Array.isArray(data) ? data : [];
   };
 
-  return { getClient, fetchTripSettings, fetchProducts };
+  /** Carries the Postgres error code/hint so App can map it to Indonesian copy. */
+  class OrderError extends Error {
+    constructor(cause) {
+      super(String(cause?.message ?? 'Pesanan gagal dibuat.'));
+      this.name = 'OrderError';
+      this.code = String(cause?.code ?? '');
+      this.hint = String(cause?.hint ?? '');
+    }
+  }
+
+  /**
+   * Creates the order. The client only sends product ids, quantities and
+   * notes — prices, fees, DP and quotas are all resolved inside the RPC.
+   * @param {{customer_name: string, customer_wa: string, shipping_address: string,
+   *          courier: string, items: Array<{product_id: string, quantity: number, notes: string}>}} payload
+   * @returns {Promise<object>} RPC result (order_code, total_amount, dp_amount, …)
+   */
+  const submitOrder = async (payload) => {
+    const { data, error } = await getClient().rpc('submit_jastip_order', { payload });
+
+    if (error) {
+      console.error('[ApiService] submit_jastip_order failed', error);
+      throw new OrderError(error);
+    }
+    if (!data || typeof data !== 'object') {
+      throw new OrderError({ message: 'Respons server tidak dikenali.' });
+    }
+    return data;
+  };
+
+  return { getClient, fetchTripSettings, fetchProducts, submitOrder, OrderError };
 })();
 
 /* ==========================================================================
@@ -74,6 +104,9 @@ const ApiService = (() => {
 const Store = (() => {
   const listeners = new Set();
   const VALID_CATEGORIES = new Set(CATEGORIES.map((item) => item.value));
+
+  /** Free text is stored as a plain string and rendered with textContent. */
+  const cleanNotes = (value) => String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, 200);
 
   const state = {
     status: 'idle', // idle | loading | ready | error
@@ -93,7 +126,11 @@ const Store = (() => {
       if (!Array.isArray(parsed)) return [];
       return parsed
         .filter((line) => line && typeof line.id === 'string' && line.id.length > 0)
-        .map((line) => ({ id: line.id, qty: clampInt(line.qty, 1, CONFIG.MAX_QTY_PER_ITEM) }));
+        .map((line) => ({
+          id: line.id,
+          qty: clampInt(line.qty, 1, CONFIG.MAX_QTY_PER_ITEM),
+          notes: cleanNotes(line.notes),
+        }));
     } catch (error) {
       return [];
     }
@@ -165,6 +202,7 @@ const Store = (() => {
 
   const quotaOf = (product) => Math.max(0, Math.trunc(Number(product?.quota_available) || 0));
 
+
   /** Max units a customer may put in the cart for one product. */
   const limitOf = (product) => Math.min(CONFIG.MAX_QTY_PER_ITEM, quotaOf(product));
 
@@ -177,13 +215,18 @@ const Store = (() => {
         if (!product) return null;
         const limit = limitOf(product);
         if (limit < 1) return null;
-        return { id: line.id, qty: clampInt(line.qty, 1, limit) };
+        return { id: line.id, qty: clampInt(line.qty, 1, limit), notes: line.notes ?? '' };
       })
       .filter(Boolean);
 
     const changed =
       next.length !== state.cart.length ||
-      next.some((line, index) => line.qty !== state.cart[index]?.qty || line.id !== state.cart[index]?.id);
+      next.some(
+        (line, index) =>
+          line.qty !== state.cart[index]?.qty ||
+          line.id !== state.cart[index]?.id ||
+          line.notes !== state.cart[index]?.notes
+      );
 
     if (changed) {
       state.cart = next;
@@ -207,7 +250,7 @@ const Store = (() => {
     }
 
     if (line) line.qty += 1;
-    else state.cart.push({ id: productId, qty: 1 });
+    else state.cart.push({ id: productId, qty: 1, notes: '' });
 
     writeCart();
     notify();
@@ -242,6 +285,17 @@ const Store = (() => {
     return { ok: true, message: '' };
   };
 
+  /** Notes never affect totals, so this deliberately does NOT notify:
+   *  re-rendering the list while the customer types would drop focus. */
+  const setNote = (productId, notes) => {
+    const line = state.cart.find((item) => item.id === productId);
+    if (!line) return;
+    const value = cleanNotes(notes);
+    if (line.notes === value) return;
+    line.notes = value;
+    writeCart();
+  };
+
   const removeFromCart = (productId) => {
     const before = state.cart.length;
     state.cart = state.cart.filter((line) => line.id !== productId);
@@ -266,22 +320,38 @@ const Store = (() => {
         const unitPrice = Math.max(0, Math.trunc(Number(product.price) || 0));
         const unitFee = Math.max(0, Math.trunc(Number(product.jastip_fee) || 0));
         const unitTotal = unitPrice + unitFee;
-        return { product, qty: line.qty, unitTotal, lineTotal: unitTotal * line.qty };
+        const qty = clampInt(line.qty, 1, Math.max(1, limitOf(product)));
+        return {
+          product,
+          qty,
+          notes: line.notes ?? '',
+          limit: limitOf(product),
+          unitPrice,
+          unitFee,
+          unitTotal,
+          productTotal: unitPrice * qty,
+          feeTotal: unitFee * qty,
+          lineTotal: unitTotal * qty,
+        };
       })
       .filter(Boolean);
 
-    const subtotal = lines.reduce((sum, line) => sum + line.lineTotal, 0);
+    const productSubtotal = lines.reduce((sum, line) => sum + line.productTotal, 0);
+    const totalFees = lines.reduce((sum, line) => sum + line.feeTotal, 0);
+    const grandTotal = productSubtotal + totalFees;
     const dpPct = clampInt(state.trip?.dp_percentage ?? 50, 0, 100);
-    // Integer division mirrors submit_jastip_order() so the customer sees the
-    // exact figure the server will store.
-    const dp = Math.trunc((subtotal * dpPct) / 100);
+    // Same rounding as submit_jastip_order(): up to the nearest Rp 100.
+    const dp = calcDp(grandTotal, dpPct);
 
     return {
       lines,
-      subtotal,
+      productSubtotal,
+      totalFees,
+      grandTotal,
+      subtotal: grandTotal,
       dpPct,
       dp,
-      remaining: subtotal - dp,
+      remaining: grandTotal - dp,
       count: lines.reduce((sum, line) => sum + line.qty, 0),
     };
   };
@@ -296,6 +366,7 @@ const Store = (() => {
     isTripOpen,
     addToCart,
     changeQty,
+    setNote,
     removeFromCart,
     clearCart,
     pruneCart,
@@ -323,9 +394,15 @@ const UI = (() => {
       'result-count', 'search-input', 'search-clear', 'category-filters', 'product-grid',
       'empty-state', 'empty-state-title', 'empty-state-term', 'empty-state-desc',
       'empty-state-desc-empty', 'empty-reset', 'error-state', 'error-message', 'error-retry',
-      'cart-button', 'cart-count', 'cart-backdrop', 'cart-drawer', 'cart-items', 'cart-empty',
-      'cart-footer', 'cart-subtotal', 'cart-dp', 'cart-dp-pct', 'cart-remaining', 'cart-wa',
-      'cart-wa-note', 'cart-clear', 'cart-title-count', 'toast-region',
+      'cart-button', 'cart-count', 'cart-backdrop', 'cart-drawer', 'cart-title-text',
+      'cart-title-count', 'cart-step-cart', 'cart-step-checkout', 'cart-step-success',
+      'cart-items', 'cart-empty', 'cart-footer', 'cart-product-subtotal', 'cart-fees',
+      'cart-grand-total', 'cart-dp', 'cart-dp-pct', 'cart-remaining', 'cart-checkout',
+      'cart-checkout-note', 'cart-clear',
+      'co-total', 'co-dp', 'co-dp-pct', 'co-remaining', 'co-name', 'co-wa', 'co-address',
+      'co-courier', 'checkout-error', 'checkout-error-text', 'checkout-submit', 'checkout-back',
+      'success-code', 'success-total', 'success-dp', 'success-remaining', 'success-wa',
+      'success-wa-note', 'success-close', 'toast-region',
     ];
 
     ids.forEach((id) => {
@@ -509,6 +586,33 @@ const UI = (() => {
   };
 
   /* ------------------------------------------------------------------ cart */
+  const CART_STEPS = { cart: 'cart-step-cart', checkout: 'cart-step-checkout', success: 'cart-step-success' };
+  const CART_TITLES = { cart: 'Keranjang', checkout: 'Data Pengiriman', success: 'Pesanan Dibuat' };
+
+  /** Swaps the drawer between cart → checkout → success. */
+  const setCartStep = (step) => {
+    const target = CART_STEPS[step] ? step : 'cart';
+    els.cartStepCart?.classList.toggle('hidden', target !== 'cart');
+    els.cartStepCheckout?.classList.toggle('hidden', target !== 'checkout');
+    els.cartStepSuccess?.classList.toggle('hidden', target !== 'success');
+    if (els.cartTitleText) els.cartTitleText.textContent = CART_TITLES[target];
+    if (els.cartTitleCount) els.cartTitleCount.classList.toggle('hidden', target !== 'cart');
+    return target;
+  };
+
+  /** Filled once; the option list never changes at runtime. */
+  const fillCouriers = () => {
+    if (!els.coCourier || els.coCourier.options.length > 0) return;
+    els.coCourier.replaceChildren(
+      ...COURIERS.map((courier) => {
+        const option = document.createElement('option');
+        option.value = courier.value;
+        option.textContent = courier.label;
+        return option;
+      })
+    );
+  };
+
   const buildCartLine = (line) => {
     const node = els.tplCartItem.content.firstElementChild.cloneNode(true);
     const find = (selector) => node.querySelector(selector);
@@ -517,10 +621,18 @@ const UI = (() => {
 
     const name = String(line.product.name ?? '').trim() || 'Produk tanpa nama';
     find('[data-name]').textContent = name;
-    find('[data-meta]').textContent = `${formatRupiah(line.unitTotal)} / item`;
     find('[data-qty]').textContent = String(line.qty);
-    find('[data-total]').textContent = formatRupiah(line.lineTotal);
     find('[data-qty]').setAttribute('aria-label', `Jumlah ${name}`);
+    find('[data-total]').textContent = formatRupiah(line.lineTotal);
+    find('[data-meta]').textContent = `${formatRupiah(line.unitPrice)} + jastip ${formatRupiah(line.unitFee)}`;
+
+    find('[data-limit]').textContent = line.qty >= line.limit ? 'Stok maks.' : `Sisa ${line.limit}`;
+    find('[data-action="inc"]').disabled = line.qty >= line.limit;
+
+    const notes = find('[data-notes]');
+    notes.value = line.notes;
+    notes.dataset.notesFor = line.product.id;
+    notes.setAttribute('aria-label', `Catatan untuk ${name}`);
 
     const img = find('[data-img]');
     const fallback = find('[data-img-fallback]');
@@ -534,34 +646,6 @@ const UI = (() => {
     }
 
     return node;
-  };
-
-  const buildWhatsAppLink = (digits, summary, trip) => {
-    const city = String(trip?.destination_city ?? '').trim();
-    const intro = city
-      ? `Halo Admin Jastip Lokal (${city}), saya mau titip beli:`
-      : 'Halo Admin Jastip Lokal, saya mau titip beli:';
-
-    const rows = summary.lines.map((line, index) => {
-      const parts = [
-        `${index + 1}. ${line.product.name}`,
-        `   ${line.qty} x ${formatRupiah(line.unitTotal)} = ${formatRupiah(line.lineTotal)}`,
-      ];
-      if (line.product.store_location) parts.push(`   Toko: ${line.product.store_location}`);
-      return parts.join('\n');
-    });
-
-    const message = [
-      intro,
-      '',
-      ...rows,
-      '',
-      `Subtotal: ${formatRupiah(summary.subtotal)}`,
-      `DP ${summary.dpPct}%: ${formatRupiah(summary.dp)}`,
-      `Sisa pelunasan: ${formatRupiah(summary.remaining)}`,
-    ].join('\n');
-
-    return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
   };
 
   const setCartBadge = (count) => {
@@ -586,29 +670,120 @@ const UI = (() => {
       els.cartItems.replaceChildren(fragment);
     }
 
-    els.cartSubtotal.textContent = formatRupiah(summary.subtotal);
+    els.cartProductSubtotal.textContent = formatRupiah(summary.productSubtotal);
+    els.cartFees.textContent = formatRupiah(summary.totalFees);
+    els.cartGrandTotal.textContent = formatRupiah(summary.grandTotal);
     els.cartDpPct.textContent = String(summary.dpPct);
     els.cartDp.textContent = formatRupiah(summary.dp);
     els.cartRemaining.textContent = formatRupiah(summary.remaining);
     setCartBadge(summary.count);
 
-    const digits = normalizePhoneId(trip?.admin_whatsapp);
-    const canSend = hasItems && digits.length >= 10 && tripOpen;
-
-    if (canSend) {
-      els.cartWa.href = buildWhatsAppLink(digits, summary, trip);
-      els.cartWa.classList.remove('pointer-events-none', 'opacity-50');
-      els.cartWa.removeAttribute('aria-disabled');
-      els.cartWaNote.textContent = 'Ringkasan otomatis terisi di WhatsApp. Admin akan mengonfirmasi stok dan total akhir.';
-    } else {
-      els.cartWa.href = '#';
-      els.cartWa.classList.add('pointer-events-none', 'opacity-50');
-      els.cartWa.setAttribute('aria-disabled', 'true');
-      els.cartWaNote.textContent = !hasItems
+    if (els.cartCheckout) els.cartCheckout.disabled = !hasItems || !tripOpen;
+    if (els.cartCheckoutNote) {
+      els.cartCheckoutNote.textContent = !hasItems
         ? ''
         : !tripOpen
-          ? 'PO sedang ditutup, pesanan belum bisa dikirim.'
-          : 'Nomor WhatsApp admin belum diatur.';
+          ? 'PO sudah ditutup. Pesanan baru tidak bisa dibuat.'
+          : 'Harga, kuota, dan DP dihitung ulang oleh server saat pesanan dibuat.';
+    }
+
+    const onSuccess = Boolean(els.cartStepSuccess) && !els.cartStepSuccess.classList.contains('hidden');
+    if (!hasItems && !onSuccess) setCartStep('cart');
+  };
+
+  const renderCheckoutSummary = (summary) => {
+    if (els.coTotal) els.coTotal.textContent = formatRupiah(summary.grandTotal);
+    if (els.coDpPct) els.coDpPct.textContent = String(summary.dpPct);
+    if (els.coDp) els.coDp.textContent = formatRupiah(summary.dp);
+    if (els.coRemaining) els.coRemaining.textContent = formatRupiah(summary.remaining);
+  };
+
+  const setCheckoutPending = (pending) => {
+    const busy = Boolean(pending);
+    if (els.checkoutSubmit) {
+      els.checkoutSubmit.disabled = busy;
+      els.checkoutSubmit.setAttribute('aria-busy', String(busy));
+      els.checkoutSubmit.querySelector('[data-submit-spinner]')?.classList.toggle('hidden', !busy);
+      const label = els.checkoutSubmit.querySelector('[data-submit-label]');
+      if (label) label.textContent = busy ? 'Memproses pesanan…' : 'Buat Pesanan';
+    }
+    if (els.checkoutBack) els.checkoutBack.disabled = busy;
+  };
+
+  const showCheckoutError = (message) => {
+    const text = String(message ?? '').trim();
+    els.checkoutError?.classList.toggle('hidden', !text);
+    if (els.checkoutErrorText) els.checkoutErrorText.textContent = text;
+  };
+
+  const clearCheckoutError = () => showCheckoutError('');
+
+  const resetCheckoutForm = () => {
+    els.cartStepCheckout?.reset();
+    clearCheckoutError();
+    setCheckoutPending(false);
+  };
+
+  const buildOrderConfirmationLink = (digits, order, trip) => {
+    const city = String(trip?.destination_city ?? '').trim();
+    const header = city
+      ? `Halo Admin Jastip Lokal (${city}), saya sudah membuat pesanan dan ingin konfirmasi DP.`
+      : 'Halo Admin Jastip Lokal, saya sudah membuat pesanan dan ingin konfirmasi DP.';
+
+    const rows = order.items.map((item, index) => {
+      const parts = [
+        `${index + 1}. ${item.name}`,
+        `   ${item.qty} x ${formatRupiah(item.unitTotal)} = ${formatRupiah(item.lineTotal)}`,
+      ];
+      if (item.store) parts.push(`   Toko: ${item.store}`);
+      if (item.notes) parts.push(`   Catatan: ${item.notes}`);
+      return parts.join('\n');
+    });
+
+    const message = [
+      header,
+      '',
+      `Kode Pesanan: ${order.code}`,
+      `Nama: ${order.customerName}`,
+      `Kurir: ${order.courier}`,
+      '',
+      'Rincian pesanan:',
+      ...rows,
+      '',
+      `Grand total: ${formatRupiah(order.total)}`,
+      `DP ${order.dpPct}%: ${formatRupiah(order.dp)}`,
+      `Sisa pelunasan: ${formatRupiah(order.remaining)}`,
+      '',
+      `Saya akan transfer DP sebesar ${formatRupiah(order.dp)} dan mengirim bukti transfernya. Terima kasih.`,
+    ].join('\n');
+
+    return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
+  };
+
+  const renderSuccess = (order, trip) => {
+    if (els.successCode) els.successCode.textContent = order.code || '—';
+    if (els.successTotal) els.successTotal.textContent = formatRupiah(order.total);
+    if (els.successDp) els.successDp.textContent = formatRupiah(order.dp);
+    if (els.successRemaining) els.successRemaining.textContent = formatRupiah(order.remaining);
+
+    const digits = normalizePhoneId(trip?.admin_whatsapp);
+    const canConfirm = digits.length >= 10;
+
+    if (els.successWa) {
+      if (canConfirm) {
+        els.successWa.href = buildOrderConfirmationLink(digits, order, trip);
+        els.successWa.classList.remove('pointer-events-none', 'opacity-50');
+        els.successWa.removeAttribute('aria-disabled');
+      } else {
+        els.successWa.href = '#';
+        els.successWa.classList.add('pointer-events-none', 'opacity-50');
+        els.successWa.setAttribute('aria-disabled', 'true');
+      }
+    }
+    if (els.successWaNote) {
+      els.successWaNote.textContent = canConfirm
+        ? 'Ringkasan pesanan otomatis terisi di WhatsApp.'
+        : 'Nomor WhatsApp admin belum diatur. Hubungi admin lewat kanal lain.';
     }
   };
 
@@ -694,6 +869,14 @@ const UI = (() => {
     syncSearch,
     renderProducts,
     renderCart,
+    setCartStep,
+    fillCouriers,
+    renderCheckoutSummary,
+    setCheckoutPending,
+    showCheckoutError,
+    clearCheckoutError,
+    resetCheckoutForm,
+    renderSuccess,
     showToast,
     openCart,
     closeCart,
@@ -766,6 +949,160 @@ const App = (() => {
     UI.showToast('Produk dihapus dari keranjang.', 'info');
   };
 
+  /* ------------------------------------------------------------- checkout */
+  let isSubmitting = false;
+
+  const ORDER_ERROR_MESSAGES = {
+    VALIDATION_ERROR: 'Data pesanan belum lengkap atau tidak valid. Periksa kembali isianmu.',
+    TRIP_NOT_CONFIGURED: 'Trip belum dikonfigurasi admin. Coba lagi nanti.',
+    TRIP_CLOSED: 'PO untuk trip ini sudah ditutup.',
+    PRODUCT_NOT_FOUND: 'Salah satu produk sudah tidak tersedia. Keranjang sudah diperbarui.',
+    OUT_OF_STOCK: 'Stok salah satu produk tidak lagi mencukupi. Kuota sudah diperbarui, sesuaikan jumlahnya.',
+    ORDER_CODE_FAILED: 'Gagal membuat kode pesanan. Coba lagi.',
+    INTERNAL_ERROR: 'Terjadi kesalahan di server. Coba lagi beberapa saat lagi.',
+  };
+
+  const currentStep = () => {
+    if (UI.els.cartStepSuccess && !UI.els.cartStepSuccess.classList.contains('hidden')) return 'success';
+    if (UI.els.cartStepCheckout && !UI.els.cartStepCheckout.classList.contains('hidden')) return 'checkout';
+    return 'cart';
+  };
+
+  const mapOrderError = (error) => {
+    const hint = String(error?.hint ?? '');
+    if (ORDER_ERROR_MESSAGES[hint]) return ORDER_ERROR_MESSAGES[hint];
+    if (error?.name === 'OrderError' && error.code === '42501') {
+      return 'Pesanan ditolak server. Muat ulang halaman lalu coba lagi.';
+    }
+    if (error?.name === 'TypeError' || /fetch|network/i.test(String(error?.message ?? ''))) {
+      return 'Koneksi ke server gagal. Periksa internetmu lalu coba lagi.';
+    }
+    return 'Pesanan gagal dibuat. Coba lagi beberapa saat lagi.';
+  };
+
+  /** Mirrors the RPC constraints so the customer gets feedback before the round trip. */
+  const readCheckoutForm = () => {
+    const name = String(UI.els.coName?.value ?? '').replace(/\s+/g, ' ').trim();
+    const wa = String(UI.els.coWa?.value ?? '').trim();
+    const address = String(UI.els.coAddress?.value ?? '').replace(/\s+/g, ' ').trim();
+    const courier = String(UI.els.coCourier?.value ?? '').trim();
+
+    if (name.length < 3 || name.length > 100) {
+      return { ok: false, message: 'Nama lengkap harus 3-100 karakter.', focus: 'co-name' };
+    }
+    if (!isValidWaNumber(wa)) {
+      return { ok: false, message: 'Nomor WhatsApp tidak valid. Gunakan format 08… atau 628….', focus: 'co-wa' };
+    }
+    if (address.length < 10 || address.length > 400) {
+      return { ok: false, message: 'Alamat pengiriman harus 10-400 karakter.', focus: 'co-address' };
+    }
+    if (!COURIERS.some((option) => option.value === courier)) {
+      return { ok: false, message: 'Pilih kurir pengiriman.', focus: 'co-courier' };
+    }
+
+    return { ok: true, values: { name, wa: normalizePhoneId(wa), address, courier } };
+  };
+
+  const refreshProducts = async () => {
+    try {
+      const products = await ApiService.fetchProducts();
+      Store.setState({ products });
+      Store.pruneCart();
+    } catch (error) {
+      console.error('[App] refreshProducts failed', error);
+    }
+  };
+
+  const goToCheckout = () => {
+    const summary = Store.getCartSummary();
+    if (summary.lines.length === 0) return;
+    if (!Store.isTripOpen()) {
+      UI.showToast('PO sudah ditutup, pesanan baru tidak bisa dibuat.', 'error');
+      return;
+    }
+    UI.renderCheckoutSummary(summary);
+    UI.clearCheckoutError();
+    UI.setCartStep('checkout');
+    window.setTimeout(() => UI.els.coName?.focus(), 60);
+  };
+
+  const handleCheckoutSubmit = async (event) => {
+    event.preventDefault();
+    if (isSubmitting) return; // guards double submits
+
+    const summary = Store.getCartSummary();
+    if (summary.lines.length === 0) {
+      UI.showCheckoutError('Keranjangmu masih kosong.');
+      return;
+    }
+    if (!Store.isTripOpen()) {
+      UI.showCheckoutError('PO untuk trip ini sudah ditutup.');
+      return;
+    }
+
+    const form = readCheckoutForm();
+    if (!form.ok) {
+      UI.showCheckoutError(form.message);
+      document.getElementById(form.focus)?.focus();
+      return;
+    }
+
+    isSubmitting = true;
+    UI.clearCheckoutError();
+    UI.setCheckoutPending(true);
+
+    // Snapshot the lines: the cart is cleared as soon as the RPC succeeds.
+    const items = summary.lines.map((line) => ({
+      name: String(line.product.name ?? '').trim() || 'Produk',
+      store: String(line.product.store_location ?? '').trim(),
+      qty: line.qty,
+      notes: line.notes,
+      unitTotal: line.unitTotal,
+      lineTotal: line.lineTotal,
+    }));
+
+    try {
+      const result = await ApiService.submitOrder({
+        customer_name: form.values.name,
+        customer_wa: form.values.wa,
+        shipping_address: form.values.address,
+        courier: form.values.courier,
+        items: summary.lines.map((line) => ({
+          product_id: line.product.id,
+          quantity: line.qty,
+          notes: line.notes,
+        })),
+      });
+
+      const order = {
+        code: String(result?.order_code ?? '').trim(),
+        total: Math.max(0, Math.trunc(Number(result?.total_amount) || 0)),
+        dp: Math.max(0, Math.trunc(Number(result?.dp_amount) || 0)),
+        remaining: Math.max(0, Math.trunc(Number(result?.remaining_amount) || 0)),
+        dpPct: clampInt(result?.dp_percentage ?? summary.dpPct, 0, 100),
+        customerName: String(result?.customer_name ?? form.values.name).trim(),
+        courier: form.values.courier,
+        items,
+      };
+
+      UI.setCartStep('success'); // before clearCart, so the empty-cart guard leaves us here
+      Store.clearCart();
+      UI.renderSuccess(order, Store.getState().trip);
+      UI.showToast(`Pesanan ${order.code || ''} berhasil dibuat.`.trim(), 'success');
+      window.setTimeout(() => UI.els.successWa?.focus(), 60);
+
+      await refreshProducts();
+    } catch (error) {
+      UI.showCheckoutError(mapOrderError(error));
+      if (['OUT_OF_STOCK', 'PRODUCT_NOT_FOUND', 'TRIP_CLOSED'].includes(String(error?.hint ?? ''))) {
+        await refreshProducts();
+      }
+    } finally {
+      isSubmitting = false;
+      UI.setCheckoutPending(false);
+    }
+  };
+
   const resetFilters = () => {
     Store.setCategory('all');
     Store.setSearch('');
@@ -811,7 +1148,13 @@ const App = (() => {
     });
 
     // cart drawer
-    els.cartButton?.addEventListener('click', () => UI.openCart());
+    els.cartButton?.addEventListener('click', () => {
+      if (currentStep() === 'success') {
+        UI.resetCheckoutForm();
+        UI.setCartStep('cart');
+      }
+      UI.openCart();
+    });
     document.querySelectorAll('[data-cart-close]').forEach((node) => {
       node.addEventListener('click', () => UI.closeCart());
     });
@@ -837,12 +1180,32 @@ const App = (() => {
       Store.clearCart();
       UI.showToast('Keranjang dikosongkan.', 'info');
     });
+
+    // per-item notes — Store.setNote is silent, so the field keeps focus
+    els.cartItems?.addEventListener('input', (event) => {
+      const input = event.target.closest('[data-notes]');
+      if (!input?.dataset.notesFor) return;
+      Store.setNote(input.dataset.notesFor, input.value);
+    });
+
+    // checkout flow
+    els.cartStepCheckout?.addEventListener('input', () => UI.clearCheckoutError());
+    els.cartCheckout?.addEventListener('click', goToCheckout);
+    els.cartStepCheckout?.addEventListener('submit', handleCheckoutSubmit);
+    els.checkoutBack?.addEventListener('click', () => {
+      UI.clearCheckoutError();
+      UI.setCartStep('cart');
+      window.setTimeout(() => UI.els.cartCheckout?.focus(), 60);
+    });
+    els.successClose?.addEventListener('click', () => UI.closeCart());
   };
 
   const init = () => {
     UI.cacheElements();
     UI.renderCategories();
     UI.syncSearch('');
+    UI.fillCouriers();
+    UI.setCartStep('cart');
     bindEvents();
     Store.subscribe(render);
     load();

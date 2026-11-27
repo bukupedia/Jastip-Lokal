@@ -108,3 +108,42 @@ with *permission denied* — that is intentional PII protection.
 RLS matrix, payload validation, server-side re-pricing, out-of-stock rollback,
 and a 3-way concurrent race on the last unit (exactly one order wins, quota
 never negative).
+
+## Phase 3 — cart, DP calculator, Supabase + WhatsApp checkout
+
+Flow inside the single cart drawer (`#cart-drawer`), three stacked sections:
+
+| step       | element                | notes                                   |
+|------------|------------------------|-----------------------------------------|
+| `cart`     | `#cart-step-cart`      | lines, notes, cost breakdown, CTA       |
+| `checkout` | `#cart-step-checkout`  | `<form novalidate>`, mirrors RPC limits |
+| `success`  | `#cart-step-success`   | order code + wa.me confirmation link    |
+
+`UI.setCartStep(step)` only toggles `hidden`; the step is read back from the DOM
+(`App.currentStep()`), so no duplicate state exists.
+
+Cart lines are `{ id, qty, notes }` in `localStorage["jastip.cart.v1"]`. Notes are
+capped at 200 chars and rendered with `textContent`. `Store.setNote()` is
+intentionally silent (no `notify()`), otherwise re-rendering the list would steal
+focus from the field being typed into.
+
+Money: `getCartSummary()` returns `productSubtotal`, `totalFees`, `grandTotal`,
+`dp`, `remaining` — all integers. DP uses `calcDp()` (round up to Rp 100, cap at
+total) which mirrors `submit_jastip_order()` in `supabase/schema.sql`. Keep both
+in sync if either changes.
+
+Checkout posts only `{ product_id, quantity, notes }` — the RPC re-prices, checks
+quota and generates `order_code`. Double submits are blocked by an `isSubmitting`
+flag plus a disabled button, and `OUT_OF_STOCK` / `PRODUCT_NOT_FOUND` / `TRIP_CLOSED`
+trigger a product refresh so the cart re-clamps to the new quota.
+
+After success the cart is cleared and the customer gets a `wa.me` deep link with
+the order code, itemised lines, DP and remaining balance pre-filled.
+
+### Gotcha: TDZ in the module IIFEs
+
+`Store` builds its initial `state` object (which calls `readCart()`) at the top of
+the IIFE. Any helper it uses must be declared **above** that object literal —
+`const` helpers declared below are in the temporal dead zone and the `try/catch`
+in `readCart` swallows the `ReferenceError`, silently losing the persisted cart.
+This exact bug shipped once; keep `cleanNotes()` above `state`.

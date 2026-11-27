@@ -1,8 +1,9 @@
 /* ============================================================================
  * js/config.js — configuration + shared, side-effect-free helpers
- * Loaded before js/app.js. Exposes globals: CONFIG, isConfigReady,
- * escapeHTML, formatRupiah, formatDateTimeId, formatRelativeDays,
- * safeImageUrl, clampInt, debounce.
+ * Loaded before js/app.js. Exposes globals: CONFIG, CATEGORIES, COURIERS,
+ * isConfigReady, escapeHTML, formatRupiah, formatDateTimeId,
+ * formatRelativeDays, safeImageUrl, normalizePhoneId, isValidWaNumber,
+ * calcDp, clampInt, debounce.
  * ==========================================================================*/
 
 'use strict';
@@ -34,6 +35,14 @@ const CATEGORIES = Object.freeze([
   { value: 'Oleh-oleh', label: 'Oleh-oleh' },
   { value: 'Fashion', label: 'Fashion' },
   { value: 'Kerajinan', label: 'Kerajinan' },
+]);
+
+/** Must match the courier values accepted by submit_jastip_order(). */
+const COURIERS = Object.freeze([
+  { value: 'JNE', label: 'JNE' },
+  { value: 'J&T', label: 'J&T' },
+  { value: 'Paxel', label: 'Paxel' },
+  { value: 'GoSend', label: 'GoSend' },
 ]);
 
 /**
@@ -172,6 +181,32 @@ function normalizePhoneId(value) {
   if (digits.startsWith('0')) digits = `62${digits.slice(1)}`;
   else if (digits.startsWith('8')) digits = `62${digits}`;
   return digits;
+}
+
+/**
+ * Indonesian mobile number in 08…, 628…, or +628… form.
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+function isValidWaNumber(value) {
+  const digits = String(value ?? '').replace(/[\s().-]/g, '');
+  return /^(?:\+62|62|0)8[1-9]\d{6,10}$/.test(digits);
+}
+
+/**
+ * Down payment in whole Rupiah, rounded UP to the nearest hundred so the
+ * customer never under-pays. Mirrors submit_jastip_order() exactly.
+ * @param {number} total
+ * @param {number} dpPercentage
+ * @returns {number}
+ */
+function calcDp(total, dpPercentage) {
+  const amount = Math.max(0, Math.trunc(Number(total) || 0));
+  const pct = clampInt(dpPercentage, 0, 100);
+  if (amount === 0 || pct === 0) return 0;
+  const raw = Math.trunc((amount * pct) / 100);
+  const rounded = Math.ceil(raw / 100) * 100;
+  return Math.min(rounded, amount);
 }
 
 /**
