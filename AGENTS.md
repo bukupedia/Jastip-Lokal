@@ -10,8 +10,9 @@ supabase/schema.sql   # Phase 1: tables, RLS policies, grants, submit_jastip_ord
 supabase/seed.sql     # dev-only demo data (trip settings + 6 products)
 index.html            # Phase 2: customer storefront (markup + <template>s)
 js/config.js          # CONFIG, CATEGORIES, escapeHTML, formatRupiah, …
-js/app.js             # ApiService / Store / UI / App modules, in that order
-admin.html            # Phase 3: admin dashboard (Supabase Auth)
+js/app.js             # Phase 2-3: ApiService / Store / UI / App modules
+admin.html            # Phase 4: admin panel shell (login + dashboard markup)
+js/admin.js           # Phase 4: AdminApi / AdminStore / AdminUI / AdminApp
 ```
 
 ## Hard rules
@@ -147,3 +148,69 @@ the IIFE. Any helper it uses must be declared **above** that object literal —
 `const` helpers declared below are in the temporal dead zone and the `try/catch`
 in `readCart` swallows the `ReferenceError`, silently losing the persisted cart.
 This exact bug shipped once; keep `cleanNotes()` above `state`.
+
+## Phase 4 — admin panel (`admin.html` + `js/admin.js`)
+
+Four IIFEs, same shape as the storefront: `AdminApi` (only Supabase caller),
+`AdminStore` (session + data snapshot + pub/sub), `AdminUI` (renders, never
+mutates), `AdminApp` (auth flow, validation, event wiring).
+
+### Auth gate
+
+`boot()` calls `supabase.auth.getSession()`. Only a non-null session reaches
+`enterDashboard()` — no data is fetched before that, so a logged-out visitor
+never triggers a single query. While signed out the dashboard element keeps
+`hidden` + `inert` and `AdminUI.clearSensitive()` wipes previously rendered
+rows, so an expired session cannot leave customer PII on screen or in the tab
+order. `onAuthStateChange` is wrapped in `setTimeout(0)` because Supabase warns
+against awaiting its own calls inside that callback; it only reacts to
+`SIGNED_OUT`/`session === null`.
+
+Security is enforced by RLS, not by this page: `anon` can read `trip_settings`
+and `products` but cannot write anything or read `orders`. Anyone can open
+`admin.html`; without a valid session every write fails and no order data is
+returned. Do not "fix" that by adding client-side role checks and calling it
+security.
+
+### Tabs
+
+`#panel-trip`, `#panel-products`, `#panel-orders` toggled by `AdminUI.selectTab`
+via `aria-selected` on the `[role="tab"]` buttons. The orders tab shows a badge
+with the count of `PENDING_DP` orders.
+
+### Validation quirks worth keeping
+
+- Numeric inputs are read as trimmed strings first. `Number('')` is `0`, so an
+  empty price/quota field would otherwise save as a zero — the raw string is
+  checked for emptiness before the numeric range check.
+- `dp_percentage` is `Math.trunc()`ed and clamped to 0–100; `close_date` is
+  converted with `new Date(value).toISOString()` and rejected when `NaN`.
+- Product delete uses a two-step inline confirm (`Hapus` → `Yakin?`, auto-reset
+  after 4 s) instead of `window.confirm()`: a blocking native dialog cannot be
+  styled, freezes mobile Safari, and silently no-ops in automated tests.
+- `DELETE /products` on a product referenced by `order_items` returns `23503`.
+  `mapDbError()` turns that into "set the quota to 0 instead", which is the
+  supported way to retire a product without breaking order history.
+
+### Order status updates
+
+`applyStatus(orderId, status, control)` returns a `Promise<boolean>` — `true`
+only when the database accepted the change. The `<select>` reverts on `false`
+and the "next step" button re-renders, so the UI can never show a status the
+server rejected. Valid values must mirror `ORDER_STATUS_ORDER`, which mirrors
+the `orders_status_chk` constraint.
+
+## Deployment (GitHub Pages)
+
+1. Repository → Settings → Pages → Source: *Deploy from a branch*, branch
+   `main`, folder `/ (root)`. Everything is static; there is no build step.
+2. Fill `js/config.js` with the project URL and the **anon** key before pushing.
+   The anon key is public by design — RLS is what protects the data.
+3. Supabase → Authentication → URL Configuration: add the Pages origin
+   (`https://<user>.github.io`) to *Site URL* / *Redirect URLs*, otherwise the
+   session cookie flow breaks on the custom domain.
+4. Supabase → Authentication → Users: create the admin account manually. There
+   is no public sign-up form, and none should be added.
+5. `https://<user>.github.io/<repo>/` serves the storefront, `/admin.html` the
+   panel. Both share `js/config.js`, so keep the paths relative (they already
+   are) — a leading `/` would break project pages.

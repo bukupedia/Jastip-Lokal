@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="id" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#1d5352" />
+  <meta name="robots" content="noindex, nofollow" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' data: https://fonts.gstatic.com https://cdnjs.cloudflare.com; img-src 'self' data: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; base-uri 'none'; object-src 'none'; form-action 'self'; frame-ancestors 'none'" />
+  <title>Panel Admin — Jastip Lokal Indonesia</title>
+
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eef7f6', 100: '#d6ecea', 200: '#b0dad7', 300: '#7fc0bc',
+              400: '#4f9f9b', 500: '#2f827f', 600: '#226866', 700: '#1d5352',
+              800: '#1a4342', 900: '#173938'
+            }
+          },
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif']
+          }
+        }
+      }
+    };
+  </script>
+
+  <style type="text/tailwindcss">
+    .card  { @apply rounded-2xl border border-slate-200 bg-white shadow-sm; }
+    .label { @apply mb-1 block text-xs font-semibold text-slate-600; }
+    .field { @apply w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 transition placeholder:text-slate-400 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:bg-slate-100 disabled:text-slate-500; }
+    .btn   { @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 disabled:cursor-not-allowed disabled:opacity-60; }
+    .btn-primary { @apply btn bg-brand-600 text-white hover:bg-brand-700; }
+    .btn-ghost   { @apply btn border border-slate-200 bg-white text-slate-700 hover:border-brand-300 hover:text-brand-700; }
+    .btn-danger  { @apply btn border border-rose-200 bg-white text-rose-600 hover:bg-rose-50; }
+    .btn-wa      { @apply btn bg-emerald-600 text-white hover:bg-emerald-700; }
+    .tab   { @apply shrink-0 rounded-xl px-4 py-2 text-sm font-semibold text-slate-500 transition hover:text-brand-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600; }
+    .tab[aria-selected="true"] { @apply bg-white text-brand-700 shadow-sm ring-1 ring-slate-200; }
+    .badge { @apply inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold; }
+    .badge[data-state="ok"]    { @apply bg-emerald-50 text-emerald-700; }
+    .badge[data-state="low"]   { @apply bg-amber-50 text-amber-700; }
+    .badge[data-state="empty"] { @apply bg-rose-50 text-rose-700; }
+    .th    { @apply px-3 py-2 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500; }
+  </style>
+</head>
+
+<body class="min-h-screen bg-slate-50 font-sans text-slate-800 antialiased">
+
+  <a href="#admin-main"
+     class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-brand-700 focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white">
+    Lewati ke konten admin
+  </a>
+
+  <!-- ===================== BOOT ===================== -->
+  <div id="admin-boot" class="grid min-h-screen place-items-center px-4">
+    <p class="flex items-center gap-2 text-sm font-medium text-slate-500">
+      <i class="fa-solid fa-circle-notch fa-spin text-brand-600" aria-hidden="true"></i>
+      Memeriksa sesi admin…
+    </p>
+  </div>
+
+  <!-- ===================== CONFIG ERROR ===================== -->
+  <section id="config-error" class="mx-auto hidden max-w-lg px-4 py-16">
+    <div class="card p-6">
+      <h1 class="flex items-center gap-2 text-lg font-extrabold text-slate-900">
+        <i class="fa-solid fa-triangle-exclamation text-amber-500" aria-hidden="true"></i>
+        Supabase belum dikonfigurasi
+      </h1>
+      <p class="mt-2 text-sm leading-relaxed text-slate-600">
+        Isi <code class="rounded bg-slate-100 px-1 py-0.5 text-xs">SUPABASE_URL</code> dan
+        <code class="rounded bg-slate-100 px-1 py-0.5 text-xs">SUPABASE_ANON_KEY</code> di
+        <code class="rounded bg-slate-100 px-1 py-0.5 text-xs">js/config.js</code>, lalu muat ulang halaman ini.
+      </p>
+    </div>
+  </section>
+
+  <!-- ===================== LOGIN ===================== -->
+  <main id="auth-view" class="hidden min-h-screen place-items-center px-4 py-10">
+    <div class="w-full max-w-sm">
+      <div class="mb-6 flex items-center justify-center gap-2.5">
+        <span class="grid h-10 w-10 place-items-center rounded-xl bg-brand-600 text-white shadow-sm">
+          <i class="fa-solid fa-bag-shopping" aria-hidden="true"></i>
+        </span>
+        <span class="leading-tight">
+          <span class="block text-sm font-extrabold tracking-tight text-slate-900">Jastip Lokal</span>
+          <span class="block text-[10px] font-bold uppercase tracking-[0.18em] text-brand-600">Panel Admin</span>
+        </span>
+      </div>
+
+      <form id="login-form" class="card p-6" novalidate>
+        <h1 class="text-lg font-extrabold text-slate-900">Masuk</h1>
+        <p class="mt-1 text-xs text-slate-500">Hanya akun admin yang dibuat di Supabase Auth yang bisa masuk.</p>
+
+        <div class="mt-5 space-y-4">
+          <div>
+            <label class="label" for="login-email">Email</label>
+            <input id="login-email" name="email" type="email" required autocomplete="username"
+                   inputmode="email" autocapitalize="none" spellcheck="false"
+                   class="field" placeholder="admin@contoh.com" />
+          </div>
+          <div>
+            <label class="label" for="login-password">Kata sandi</label>
+            <div class="relative">
+              <input id="login-password" name="password" type="password" required
+                     autocomplete="current-password" class="field pr-11" placeholder="••••••••" />
+              <button id="login-toggle-password" type="button"
+                      class="absolute inset-y-0 right-0 grid w-11 place-items-center text-slate-400 hover:text-brand-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+                      aria-label="Tampilkan kata sandi" aria-pressed="false">
+                <i class="fa-solid fa-eye" aria-hidden="true"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div id="login-error" class="mt-4 hidden items-start gap-2 rounded-xl bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700 ring-1 ring-rose-200" role="alert">
+          <i class="fa-solid fa-circle-exclamation mt-0.5" aria-hidden="true"></i>
+          <span id="login-error-text"></span>
+        </div>
+
+        <button id="login-submit" type="submit" class="btn-primary mt-5 w-full">
+          <span id="login-submit-spinner" class="hidden"><i class="fa-solid fa-circle-notch fa-spin" aria-hidden="true"></i></span>
+          <span id="login-submit-label">Masuk ke panel</span>
+        </button>
+
+        <p class="mt-4 text-center text-xs text-slate-500">
+          <a href="./" class="font-semibold text-brand-700 hover:underline">Kembali ke toko</a>
+        </p>
+      </form>
+    </div>
+  </main>
+
+  <!-- ===================== DASHBOARD ===================== -->
+  <div id="admin-app" class="hidden min-h-screen" inert>
+    <header class="sticky top-0 z-30 border-b border-slate-200/80 bg-white/90 backdrop-blur">
+      <div class="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-3 sm:px-6">
+        <a href="./" class="flex items-center gap-2.5 rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600">
+          <span class="grid h-9 w-9 place-items-center rounded-xl bg-brand-600 text-white shadow-sm">
+            <i class="fa-solid fa-bag-shopping" aria-hidden="true"></i>
+          </span>
+          <span class="leading-tight">
+            <span class="block text-sm font-extrabold tracking-tight text-slate-900">Jastip Lokal</span>
+            <span class="block text-[10px] font-bold uppercase tracking-[0.18em] text-brand-600">Panel Admin</span>
+          </span>
+        </a>
+
+        <div class="ml-auto flex items-center gap-2">
+          <span id="admin-email" class="hidden max-w-[180px] truncate text-xs font-medium text-slate-500 sm:block"></span>
+          <a href="./" class="btn-ghost hidden sm:inline-flex">
+            <i class="fa-solid fa-store" aria-hidden="true"></i> Toko
+          </a>
+          <button id="logout-button" type="button" class="btn-ghost">
+            <i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i> Keluar
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <div class="mx-auto max-w-6xl px-4 py-6 sm:px-6">
+      <div class="flex items-center gap-1 overflow-x-auto rounded-2xl bg-slate-100/80 p-1" role="tablist" aria-label="Bagian admin">
+        <button id="tab-trip" type="button" role="tab" class="tab" aria-selected="true" aria-controls="panel-trip" data-tab="trip">
+          <i class="fa-solid fa-route mr-1.5" aria-hidden="true"></i> Trip
+        </button>
+        <button id="tab-produk" type="button" role="tab" class="tab" aria-selected="false" aria-controls="panel-produk" data-tab="produk">
+          <i class="fa-solid fa-box-open mr-1.5" aria-hidden="true"></i> Produk
+        </button>
+        <button id="tab-pesanan" type="button" role="tab" class="tab" aria-selected="false" aria-controls="panel-pesanan" data-tab="pesanan">
+          <i class="fa-solid fa-receipt mr-1.5" aria-hidden="true"></i> Pesanan
+          <span id="orders-count" class="ml-1.5 hidden rounded-full bg-brand-600 px-1.5 py-0.5 text-[10px] font-bold text-white"></span>
+        </button>
+      </div>
+
+      <main id="admin-main" class="mt-5">
+
+        <!-- ---------------- TRIP ---------------- -->
+        <section id="panel-trip" role="tabpanel" aria-labelledby="tab-trip">
+          <form id="trip-form" class="card p-5 sm:p-6" novalidate>
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 class="text-base font-extrabold text-slate-900">Pengaturan Trip</h2>
+                <p class="mt-0.5 text-xs text-slate-500">Tampil di banner toko dan dipakai saat pesanan dibuat.</p>
+              </div>
+              <span id="trip-state-pill" class="badge bg-slate-100 text-slate-600">—</span>
+            </div>
+
+            <div class="mt-5 grid gap-4 sm:grid-cols-2">
+              <div class="sm:col-span-2">
+                <label class="label" for="trip-city">Kota tujuan</label>
+                <input id="trip-city" name="destination_city" type="text" maxlength="80" class="field" placeholder="Contoh: Yogyakarta" />
+              </div>
+
+              <div>
+                <label class="label" for="trip-dp">Uang muka (DP) %</label>
+                <input id="trip-dp" name="dp_percentage" type="number" min="0" max="100" step="1" inputmode="numeric" class="field" placeholder="50" />
+                <p class="mt-1 text-[11px] text-slate-500">0 = tanpa DP. Dibulatkan ke atas per Rp 100.</p>
+              </div>
+
+              <div>
+                <label class="label" for="trip-close">PO ditutup pada</label>
+                <input id="trip-close" name="close_date" type="datetime-local" class="field" />
+              </div>
+
+              <div>
+                <label class="label" for="trip-arrival">Estimasi tiba</label>
+                <input id="trip-arrival" name="arrival_estimate" type="text" maxlength="120" class="field" placeholder="±3 hari setelah PO ditutup" />
+              </div>
+
+              <div>
+                <label class="label" for="trip-wa">WhatsApp admin</label>
+                <input id="trip-wa" name="admin_whatsapp" type="tel" inputmode="tel" class="field" placeholder="0812xxxxxxx" />
+              </div>
+
+              <div class="sm:col-span-2">
+                <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-3">
+                  <input id="trip-open" name="is_open" type="checkbox" class="mt-0.5 h-4 w-4 shrink-0 accent-brand-600" />
+                  <span>
+                    <span class="block text-sm font-semibold text-slate-800">PO dibuka</span>
+                    <span class="block text-[11px] text-slate-500">Jika dimatikan, tombol pesan di toko dinonaktifkan.</span>
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            <div class="mt-5 flex flex-wrap items-center gap-3">
+              <button id="trip-submit" type="submit" class="btn-primary">
+                <span id="trip-submit-spinner" class="hidden"><i class="fa-solid fa-circle-notch fa-spin" aria-hidden="true"></i></span>
+                <span id="trip-submit-label">Simpan pengaturan</span>
+              </button>
+              <span id="trip-saved-at" class="text-xs text-slate-500"></span>
+            </div>
+          </form>
+        </section>
+
+        <!-- ---------------- PRODUK ---------------- -->
+        <section id="panel-produk" role="tabpanel" aria-labelledby="tab-produk" class="hidden space-y-5">
+          <form id="product-form" class="card p-5 sm:p-6" novalidate>
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 id="product-form-title" class="text-base font-extrabold text-slate-900">Tambah Produk</h2>
+                <p class="mt-0.5 text-xs text-slate-500">Harga dan jastip dalam rupiah penuh (tanpa desimal).</p>
+              </div>
+              <button id="product-cancel" type="button" class="btn-ghost hidden">Batal ubah</button>
+            </div>
+
+            <input id="product-id" type="hidden" />
+
+            <div class="mt-5 grid gap-4 sm:grid-cols-2">
+              <div class="sm:col-span-2">
+                <label class="label" for="product-name">Nama produk</label>
+                <input id="product-name" type="text" maxlength="120" class="field" placeholder="Contoh: Bakpia Pathok 25 Isi 10" />
+              </div>
+              <div>
+                <label class="label" for="product-category">Kategori</label>
+                <select id="product-category" class="field"></select>
+              </div>
+              <div>
+                <label class="label" for="product-store">Nama toko / lokasi</label>
+                <input id="product-store" type="text" maxlength="120" class="field" placeholder="Bakpia Pathok 25" />
+              </div>
+              <div>
+                <label class="label" for="product-price">Harga barang (Rp)</label>
+                <input id="product-price" type="number" min="0" step="500" inputmode="numeric" class="field" placeholder="45000" />
+              </div>
+              <div>
+                <label class="label" for="product-fee">Jastip fee / item (Rp)</label>
+                <input id="product-fee" type="number" min="0" step="500" inputmode="numeric" class="field" placeholder="10000" />
+              </div>
+              <div>
+                <label class="label" for="product-quota">Kuota tersedia</label>
+                <input id="product-quota" type="number" min="0" step="1" inputmode="numeric" class="field" placeholder="10" />
+              </div>
+              <div>
+                <label class="label" for="product-image">URL gambar (opsional)</label>
+                <input id="product-image" type="url" class="field" placeholder="https://…" />
+              </div>
+            </div>
+
+            <div id="product-error" class="mt-4 hidden items-start gap-2 rounded-xl bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700 ring-1 ring-rose-200" role="alert">
+              <i class="fa-solid fa-circle-exclamation mt-0.5" aria-hidden="true"></i>
+              <span id="product-error-text"></span>
+            </div>
+
+            <div class="mt-5 flex flex-wrap items-center gap-3">
+              <button id="product-submit" type="submit" class="btn-primary">
+                <span id="product-submit-spinner" class="hidden"><i class="fa-solid fa-circle-notch fa-spin" aria-hidden="true"></i></span>
+                <span id="product-submit-label">Tambah produk</span>
+              </button>
+            </div>
+          </form>
+
+          <div class="card overflow-hidden">
+            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-3">
+              <h3 class="text-sm font-extrabold text-slate-900">Daftar Produk</h3>
+              <span id="products-count" class="text-xs text-slate-500"></span>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full min-w-[720px] border-collapse">
+                <thead class="bg-slate-50">
+                  <tr>
+                    <th class="th">Produk</th>
+                    <th class="th text-right">Harga</th>
+                    <th class="th text-right">Jastip</th>
+                    <th class="th text-right">Kuota</th>
+                    <th class="th text-right">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="products-body"></tbody>
+              </table>
+            </div>
+            <p id="products-empty" class="hidden px-5 py-8 text-center text-sm text-slate-500">Belum ada produk. Tambahkan produk pertama di form atas.</p>
+          </div>
+        </section>
+
+        <!-- ---------------- PESANAN ---------------- -->
+        <section id="panel-pesanan" role="tabpanel" aria-labelledby="tab-pesanan" class="hidden space-y-5">
+          <div class="card p-5">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 class="text-base font-extrabold text-slate-900">Pesanan Masuk</h2>
+                <p class="mt-0.5 text-xs text-slate-500">Alur: Menunggu DP → DP Dikonfirmasi → Barang Dibeli → Selesai.</p>
+              </div>
+              <button id="orders-refresh" type="button" class="btn-ghost">
+                <i class="fa-solid fa-rotate" aria-hidden="true"></i> Muat ulang
+              </button>
+            </div>
+            <div id="orders-error" class="mt-4 hidden items-start gap-2 rounded-xl bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700 ring-1 ring-rose-200" role="alert">
+              <i class="fa-solid fa-circle-exclamation mt-0.5" aria-hidden="true"></i>
+              <span id="orders-error-text"></span>
+            </div>
+          </div>
+
+          <div class="card overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full min-w-[900px] border-collapse">
+                <thead class="bg-slate-50">
+                  <tr>
+                    <th class="th">Pesanan</th>
+                    <th class="th">Pembeli</th>
+                    <th class="th">Item</th>
+                    <th class="th text-right">Tagihan</th>
+                    <th class="th">Status</th>
+                    <th class="th text-right">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="orders-body"></tbody>
+              </table>
+            </div>
+            <p id="orders-empty" class="hidden px-5 py-10 text-center text-sm text-slate-500">Belum ada pesanan masuk.</p>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- ===================== TOASTS ===================== -->
+  <div id="toast-region" class="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex flex-col items-center gap-2 px-4" aria-live="polite" aria-atomic="false"></div>
+
+  <!-- ===================== TEMPLATES ===================== -->
+  <template id="tpl-product-row">
+    <tr class="border-t border-slate-100 align-top">
+      <td class="px-3 py-3">
+        <p data-name class="text-sm font-semibold text-slate-800"></p>
+        <p data-meta class="text-[11px] text-slate-500"></p>
+      </td>
+      <td class="px-3 py-3 text-right text-sm tabular-nums text-slate-700" data-price></td>
+      <td class="px-3 py-3 text-right text-sm tabular-nums text-slate-700" data-fee></td>
+      <td class="px-3 py-3 text-right">
+        <span data-quota class="badge"></span>
+      </td>
+      <td class="whitespace-nowrap px-3 py-3 text-right">
+        <button type="button" data-action="edit" class="btn-ghost px-3 py-1.5 text-xs">Ubah</button>
+        <button type="button" data-action="delete" class="btn-danger px-3 py-1.5 text-xs">Hapus</button>
+      </td>
+    </tr>
+  </template>
+
+  <template id="tpl-order-row">
+    <tr class="border-t border-slate-100 align-top">
+      <td class="px-3 py-3">
+        <p data-code class="font-mono text-xs font-bold text-slate-800"></p>
+        <p data-date class="text-[11px] text-slate-500"></p>
+        <p data-courier class="text-[11px] text-slate-500"></p>
+      </td>
+      <td class="px-3 py-3">
+        <p data-customer class="text-sm font-semibold text-slate-800"></p>
+        <a data-wa class="text-[11px] font-medium text-brand-700 hover:underline" target="_blank" rel="noopener noreferrer"></a>
+        <p data-address class="mt-1 max-w-[220px] text-[11px] leading-snug text-slate-500"></p>
+      </td>
+      <td class="px-3 py-3">
+        <details>
+          <summary data-items-summary class="cursor-pointer text-xs font-semibold text-slate-600"></summary>
+          <ul data-items class="mt-1.5 space-y-1 text-[11px] leading-snug text-slate-600"></ul>
+        </details>
+      </td>
+      <td class="px-3 py-3 text-right text-xs tabular-nums">
+        <p data-total class="font-semibold text-slate-800"></p>
+        <p data-dp class="text-slate-500"></p>
+        <p data-remaining class="text-slate-500"></p>
+      </td>
+      <td class="px-3 py-3">
+        <label class="sr-only" data-status-label>Status pesanan</label>
+        <select data-status class="field px-2 py-1.5 text-xs"></select>
+        <button type="button" data-next class="mt-1.5 w-full rounded-lg border border-brand-200 bg-brand-50 px-2 py-1 text-[11px] font-bold text-brand-700 transition hover:bg-brand-100 disabled:opacity-50">
+          Langkah berikutnya →
+        </button>
+      </td>
+      <td class="px-3 py-3 text-right">
+        <a data-contact class="btn-wa px-3 py-1.5 text-xs" target="_blank" rel="noopener noreferrer">
+          <i class="fa-brands fa-whatsapp" aria-hidden="true"></i> Hubungi
+        </a>
+      </td>
+    </tr>
+  </template>
+
+  <!-- ===================== SCRIPTS ===================== -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+  <script src="js/config.js" defer></script>
+  <script src="js/admin.js" defer></script>
+</body>
+</html>
