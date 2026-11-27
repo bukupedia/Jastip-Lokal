@@ -15,8 +15,8 @@
  *    shipped to the browser: it bypasses Row Level Security.
  * ------------------------------------------------------------------------- */
 const CONFIG = Object.freeze({
-  SUPABASE_URL: 'https://YOUR-PROJECT-REF.supabase.co',
-  SUPABASE_ANON_KEY: 'YOUR-SUPABASE-ANON-KEY',
+  SUPABASE_URL: 'https://jnqpvvftuodmtgdtxooq.supabase.co',
+  SUPABASE_ANON_KEY: 'sb_publishable_ZiHZpHFTIx5qsThsmuD1VA_QHjSQCiB',
 
   TRIP_SETTINGS_ID: 1,
 
