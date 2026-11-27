@@ -8,9 +8,10 @@ Tailwind and Font Awesome via CDN.
 ```
 supabase/schema.sql   # Phase 1: tables, RLS policies, grants, submit_jastip_order()
 supabase/seed.sql     # dev-only demo data (trip settings + 6 products)
-index.html            # Phase 2: customer storefront
+index.html            # Phase 2: customer storefront (markup + <template>s)
+js/config.js          # CONFIG, CATEGORIES, escapeHTML, formatRupiah, …
+js/app.js             # ApiService / Store / UI / App modules, in that order
 admin.html            # Phase 3: admin dashboard (Supabase Auth)
-assets/js/            # config / supabase service / state / ui modules
 ```
 
 ## Hard rules
@@ -21,6 +22,31 @@ assets/js/            # config / supabase service / state / ui modules
 - All money is `bigint`/integer Rupiah. No `parseFloat` on prices.
 - Order creation goes through the RPC `submit_jastip_order(payload jsonb)`,
   never through direct table inserts. Prices and quotas are resolved server-side.
+
+## Frontend notes (Phase 2)
+
+- `js/app.js` is four IIFEs: `ApiService` (only Supabase caller), `Store`
+  (state + pub/sub + localStorage cart), `UI` (renders, never mutates state),
+  `App` (event wiring). `UI` receives `tripOpen` as an argument instead of
+  reading `Store`, so rendering stays a pure function of its inputs.
+- Product/cart cards are cloned from `<template>` elements and filled with
+  `textContent`. There is no string-built markup anywhere, so DB values cannot
+  become HTML.
+- Category chips are styled from `aria-pressed` (CSS in the
+  `<style type="text/tailwindcss">` block), so the accessible state and the
+  visual state cannot drift apart.
+- The cart lives in `localStorage` under `jastip.cart.v1` as `[{id, qty}]` and
+  is re-joined with live product rows on every render (`Store.pruneCart` drops
+  deleted products and clamps quantities to the current quota).
+- The cart CTA opens `wa.me` with a pre-filled summary; `normalizePhoneId()`
+  converts `0812…` to `62812…` because wa.me rejects the leading zero.
+- CSP lives in a `<meta>` tag. If you add a CDN, add it to the right directive —
+  Font Awesome needs `style-src` **and** `font-src` for cdnjs, Tailwind needs
+  `script-src` for cdn.tailwindcss.com plus `'unsafe-inline'` for its config
+  and `<style type="text/tailwindcss">` block.
+- Supabase error text is logged to the console and replaced with a generic
+  Indonesian message before it reaches the DOM (PostgREST messages leak schema
+  details).
 
 ## Database contract (Phase 1, verified against PostgreSQL 17)
 

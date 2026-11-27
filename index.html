@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="id" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#1d5352" />
+  <meta name="description" content="Jastip Lokal Indonesia — titip beli oleh-oleh, kuliner, fashion, dan kerajinan langsung dari kota tujuan. Cukup DP 50%." />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' data: https://fonts.gstatic.com https://cdnjs.cloudflare.com; img-src 'self' data: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; base-uri 'none'; object-src 'none'; form-action 'self'; frame-ancestors 'none'" />
+  <title>Jastip Lokal Indonesia — Titip Beli dari Kota Tujuan</title>
+
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eef7f6', 100: '#d6ecea', 200: '#b0dad7', 300: '#7fc0bc',
+              400: '#4f9f9b', 500: '#2f827f', 600: '#226866', 700: '#1d5352',
+              800: '#1a4342', 900: '#173938'
+            }
+          },
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif']
+          }
+        }
+      }
+    };
+  </script>
+
+  <style type="text/tailwindcss">
+    /* Chip styling is driven by aria-pressed so the accessible state and the
+       visual state can never drift apart. */
+    .chip {
+      @apply shrink-0 rounded-full border px-4 py-2 text-xs font-semibold transition-colors
+             focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2
+             focus-visible:outline-brand-600;
+    }
+    .chip[aria-pressed="true"]  { @apply border-brand-600 bg-brand-600 text-white shadow-sm; }
+    .chip[aria-pressed="false"] { @apply border-slate-200 bg-white text-slate-600 hover:border-brand-300 hover:text-brand-700; }
+
+    .status-pill { @apply inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold ring-1; }
+    .status-pill[data-state="open"]   { @apply bg-emerald-400/20 text-emerald-50 ring-emerald-200/40; }
+    .status-pill[data-state="closed"] { @apply bg-rose-500/25 text-rose-50 ring-rose-200/40; }
+    .status-pill[data-state="unknown"]{ @apply bg-white/15 text-white ring-white/25; }
+    .status-pill > .dot { @apply h-1.5 w-1.5 rounded-full bg-current; }
+
+    .quota-badge[data-state="ok"]    { @apply bg-white/90 text-slate-700; }
+    .quota-badge[data-state="low"]   { @apply bg-amber-100/95 text-amber-800; }
+    .quota-badge[data-state="empty"] { @apply bg-rose-100/95 text-rose-700; }
+
+    .skeleton {
+      @apply animate-pulse rounded-xl bg-slate-200/80;
+    }
+    @keyframes shimmer {
+      100% { transform: translateX(100%); }
+    }
+
+    .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+
+    /* The search field ships its own clear button. */
+    input[type="search"]::-webkit-search-cancel-button,
+    input[type="search"]::-webkit-search-decoration { -webkit-appearance: none; appearance: none; }
+  </style>
+</head>
+
+<body class="min-h-screen bg-slate-50 font-sans text-slate-800 antialiased">
+
+  <a href="#katalog"
+     class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-brand-700 focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white">
+    Lewati ke katalog produk
+  </a>
+
+  <!-- ===================== HEADER ===================== -->
+  <header class="sticky top-0 z-30 border-b border-slate-200/80 bg-white/85 backdrop-blur">
+    <div class="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3 sm:px-6">
+      <a href="./" class="flex items-center gap-2.5 rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600">
+        <span class="grid h-10 w-10 place-items-center rounded-xl bg-brand-600 text-white shadow-sm">
+          <i class="fa-solid fa-bag-shopping" aria-hidden="true"></i>
+        </span>
+        <span class="leading-tight">
+          <span class="block text-sm font-extrabold tracking-tight text-slate-900 sm:text-base">Jastip Lokal</span>
+          <span class="block text-[10px] font-bold uppercase tracking-[0.18em] text-brand-600">Indonesia</span>
+        </span>
+      </a>
+
+      <button id="cart-button" type="button"
+              class="relative ml-auto grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:border-brand-300 hover:text-brand-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+              aria-label="Buka keranjang" aria-haspopup="dialog" aria-controls="cart-drawer" aria-expanded="false">
+        <i class="fa-solid fa-cart-shopping" aria-hidden="true"></i>
+        <span id="cart-count"
+              class="absolute -right-1 -top-1 hidden min-w-[18px] rounded-full bg-rose-500 px-1 text-center text-[10px] font-bold leading-[18px] text-white">0</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-6xl px-4 pb-24 pt-5 sm:px-6">
+
+    <!-- ===================== TRIP BANNER ===================== -->
+    <section aria-labelledby="trip-heading" class="mb-6">
+      <h2 id="trip-heading" class="sr-only">Informasi trip jastip yang sedang berjalan</h2>
+
+      <div id="banner-skeleton" class="overflow-hidden rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200 sm:p-6">
+        <div class="skeleton h-3 w-28"></div>
+        <div class="skeleton mt-3 h-7 w-52"></div>
+        <div class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div class="skeleton h-16"></div>
+          <div class="skeleton h-16"></div>
+          <div class="skeleton hidden h-16 sm:block"></div>
+        </div>
+      </div>
+
+      <div id="banner-content" class="hidden overflow-hidden rounded-3xl bg-gradient-to-br from-brand-800 via-brand-700 to-brand-500 p-5 text-white shadow-lg shadow-brand-900/10 sm:p-6">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div class="min-w-0">
+            <p class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-white/70">
+              <i class="fa-solid fa-plane-departure" aria-hidden="true"></i>
+              <span>Jastip Spesial</span>
+            </p>
+            <p id="trip-city" class="mt-1 truncate text-2xl font-extrabold leading-tight sm:text-3xl">—</p>
+          </div>
+          <span id="trip-status" class="status-pill" data-state="unknown">
+            <span class="dot" aria-hidden="true"></span>
+            <span id="trip-status-text">Memuat…</span>
+          </span>
+        </div>
+
+        <dl class="mt-5 grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3">
+          <div class="rounded-2xl bg-white/10 p-3 ring-1 ring-inset ring-white/15">
+            <dt class="text-[10px] font-bold uppercase tracking-wider text-white/60">Tutup PO</dt>
+            <dd id="trip-close" class="mt-1 text-sm font-bold leading-snug">—</dd>
+            <p id="trip-countdown" class="mt-0.5 text-[11px] font-medium text-white/70"></p>
+          </div>
+          <div class="rounded-2xl bg-white/10 p-3 ring-1 ring-inset ring-white/15">
+            <dt class="text-[10px] font-bold uppercase tracking-wider text-white/60">Estimasi Tiba</dt>
+            <dd id="trip-arrival" class="mt-1 text-sm font-bold leading-snug">—</dd>
+          </div>
+          <div class="col-span-2 rounded-2xl bg-white/10 p-3 ring-1 ring-inset ring-white/15 sm:col-span-1">
+            <dt class="text-[10px] font-bold uppercase tracking-wider text-white/60">Uang Muka</dt>
+            <dd id="trip-dp" class="mt-1 text-sm font-bold leading-snug">—</dd>
+          </div>
+        </dl>
+
+        <p id="trip-note" class="mt-3 hidden items-start gap-2 rounded-2xl bg-rose-950/30 p-3 text-xs font-medium text-rose-50 ring-1 ring-inset ring-rose-200/25">
+          <i class="fa-solid fa-circle-exclamation mt-0.5" aria-hidden="true"></i>
+          <span id="trip-note-text"></span>
+        </p>
+      </div>
+    </section>
+
+    <!-- ===================== CATALOG ===================== -->
+    <section id="katalog" aria-labelledby="katalog-heading" class="scroll-mt-24">
+      <div class="mb-3 flex items-end justify-between gap-3">
+        <h2 id="katalog-heading" class="text-lg font-extrabold tracking-tight text-slate-900 sm:text-xl">Katalog Produk</h2>
+        <p id="result-count" class="text-xs font-semibold text-slate-500" aria-live="polite"></p>
+      </div>
+
+      <div class="mb-4 space-y-3">
+        <div class="relative">
+          <label for="search-input" class="sr-only">Cari produk atau nama toko</label>
+          <i class="fa-solid fa-magnifying-glass pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-slate-400" aria-hidden="true"></i>
+          <input id="search-input" type="search" inputmode="search" autocomplete="off" spellcheck="false"
+                 placeholder="Cari produk atau nama toko…"
+                 class="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-10 pr-11 text-sm text-slate-800 shadow-sm transition placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/25" />
+          <button id="search-clear" type="button"
+                  class="absolute right-2 top-1/2 hidden -translate-y-1/2 rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-600"
+                  aria-label="Hapus pencarian">
+            <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+          </button>
+        </div>
+
+        <div id="category-filters" role="group" aria-label="Filter kategori"
+             class="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1"></div>
+      </div>
+
+      <div id="product-grid" class="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-4" aria-busy="true"></div>
+
+      <div id="empty-state" hidden class="mt-2 rounded-3xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
+        <span class="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-slate-100 text-slate-400">
+          <i class="fa-solid fa-box-open text-xl" aria-hidden="true"></i>
+        </span>
+        <h3 id="empty-state-title" class="mt-4 text-base font-bold text-slate-900">Produk tidak ditemukan</h3>
+        <p id="empty-state-desc" class="mx-auto mt-1 max-w-sm text-sm text-slate-500">
+          Tidak ada hasil untuk <span id="empty-state-term" class="font-semibold text-slate-700"></span>.
+          Coba kata kunci lain atau pilih kategori berbeda.
+        </p>
+        <p id="empty-state-desc-empty" class="mx-auto mt-1 hidden max-w-sm text-sm text-slate-500">
+          Admin belum menambahkan produk untuk trip ini. Cek kembali nanti.
+        </p>
+        <button id="empty-reset" type="button"
+                class="mt-5 inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600">
+          <i class="fa-solid fa-rotate-left" aria-hidden="true"></i>
+          Reset filter
+        </button>
+      </div>
+
+      <div id="error-state" hidden class="mt-2 rounded-3xl border border-rose-200 bg-rose-50 px-6 py-14 text-center">
+        <span class="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-rose-100 text-rose-600">
+          <i class="fa-solid fa-triangle-exclamation text-xl" aria-hidden="true"></i>
+        </span>
+        <h3 class="mt-4 text-base font-bold text-rose-900">Katalog gagal dimuat</h3>
+        <p id="error-message" class="mx-auto mt-1 max-w-md text-sm text-rose-700"></p>
+        <button id="error-retry" type="button"
+                class="mt-5 inline-flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-600">
+          <i class="fa-solid fa-rotate-right" aria-hidden="true"></i>
+          Coba lagi
+        </button>
+      </div>
+    </section>
+  </main>
+
+  <footer class="border-t border-slate-200 bg-white">
+    <div class="mx-auto max-w-6xl px-4 py-8 text-center text-xs text-slate-500 sm:px-6">
+      <p class="font-semibold text-slate-700">Jastip Lokal Indonesia</p>
+      <p class="mt-1">Titip beli produk lokal langsung dari kota tujuan. Pembayaran DP, pelunasan setelah barang tiba.</p>
+    </div>
+  </footer>
+
+  <!-- ===================== CART DRAWER ===================== -->
+  <div id="cart-backdrop" data-cart-close class="fixed inset-0 z-40 hidden bg-slate-900/40 backdrop-blur-sm"></div>
+
+  <aside id="cart-drawer" role="dialog" aria-modal="true" aria-labelledby="cart-title" inert
+         class="fixed inset-y-0 right-0 z-50 flex w-full max-w-md translate-x-full flex-col bg-white shadow-2xl transition-transform duration-300 ease-out">
+    <header class="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+      <h2 id="cart-title" class="flex items-baseline gap-2 text-base font-extrabold text-slate-900">
+        Keranjang
+        <span id="cart-title-count" class="text-xs font-semibold text-slate-400"></span>
+      </h2>
+      <button type="button" data-cart-close
+              class="grid h-9 w-9 place-items-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-600"
+              aria-label="Tutup keranjang">
+        <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+      </button>
+    </header>
+
+    <div id="cart-items" class="flex-1 overflow-y-auto px-5"></div>
+
+    <div id="cart-empty" class="hidden flex-1 flex-col items-center justify-center px-8 text-center">
+      <span class="grid h-14 w-14 place-items-center rounded-2xl bg-slate-100 text-slate-400">
+        <i class="fa-solid fa-cart-shopping text-xl" aria-hidden="true"></i>
+      </span>
+      <p class="mt-4 text-sm font-bold text-slate-900">Keranjang masih kosong</p>
+      <p class="mt-1 text-xs text-slate-500">Pilih produk favoritmu, lalu kirim ringkasannya ke admin lewat WhatsApp.</p>
+    </div>
+
+    <footer id="cart-footer" class="hidden border-t border-slate-200 px-5 py-4">
+      <dl class="space-y-1.5 text-sm">
+        <div class="flex items-center justify-between">
+          <dt class="text-slate-500">Subtotal (termasuk jastip)</dt>
+          <dd id="cart-subtotal" class="font-bold text-slate-900">Rp 0</dd>
+        </div>
+        <div class="flex items-center justify-between">
+          <dt class="text-slate-500">DP <span id="cart-dp-pct">50</span>%</dt>
+          <dd id="cart-dp" class="font-bold text-brand-700">Rp 0</dd>
+        </div>
+        <div class="flex items-center justify-between border-t border-dashed border-slate-200 pt-1.5">
+          <dt class="text-slate-500">Sisa pelunasan</dt>
+          <dd id="cart-remaining" class="font-bold text-slate-900">Rp 0</dd>
+        </div>
+      </dl>
+
+      <a id="cart-wa" href="#" target="_blank" rel="noopener noreferrer"
+         class="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-brand-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600">
+        <i class="fa-brands fa-whatsapp text-base" aria-hidden="true"></i>
+        Kirim Pesanan via WhatsApp
+      </a>
+      <p id="cart-wa-note" class="mt-2 text-center text-[11px] leading-relaxed text-slate-500"></p>
+      <button id="cart-clear" type="button"
+              class="mt-3 w-full rounded-xl px-4 py-2 text-xs font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-rose-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-600">
+        Kosongkan keranjang
+      </button>
+    </footer>
+  </aside>
+
+  <!-- ===================== TOASTS ===================== -->
+  <div id="toast-region" aria-live="polite" aria-atomic="false"
+       class="pointer-events-none fixed inset-x-0 bottom-4 z-[60] flex flex-col items-center gap-2 px-4"></div>
+
+  <!-- ===================== TEMPLATES ===================== -->
+  <template id="tpl-product">
+    <article class="group flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200/80 transition hover:shadow-md hover:ring-brand-200">
+      <div class="relative aspect-[4/3] overflow-hidden bg-slate-100">
+        <img data-img class="h-full w-full object-cover transition duration-300 group-hover:scale-105" loading="lazy" decoding="async" referrerpolicy="no-referrer" alt="" />
+        <div data-img-fallback class="absolute inset-0 hidden items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200 text-slate-400">
+          <i class="fa-solid fa-image text-3xl" aria-hidden="true"></i>
+        </div>
+        <span data-quota class="quota-badge absolute left-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-bold shadow-sm backdrop-blur"></span>
+        <span data-category class="absolute right-2 top-2 rounded-full bg-brand-700/90 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm"></span>
+      </div>
+
+      <div class="flex flex-1 flex-col gap-1.5 p-3 sm:p-4">
+        <h3 data-name class="line-clamp-2 text-sm font-bold leading-snug text-slate-900 sm:text-[15px]"></h3>
+        <p class="flex items-center gap-1.5 text-[11px] text-slate-500">
+          <i class="fa-solid fa-store shrink-0 text-[10px]" aria-hidden="true"></i>
+          <span data-store class="truncate"></span>
+        </p>
+
+        <div class="mt-auto pt-2">
+          <p data-price class="text-base font-extrabold tracking-tight text-slate-900 sm:text-lg"></p>
+          <p class="mt-0.5 text-[10px] text-slate-500 sm:text-[11px]">
+            + Jastip <span data-fee class="font-bold text-slate-600"></span>/item
+          </p>
+        </div>
+
+        <button data-add type="button"
+                class="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-brand-600 px-2 py-2.5 text-xs font-bold text-white transition hover:bg-brand-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500 sm:text-sm">
+          <i class="fa-solid fa-cart-plus text-[11px] sm:text-xs" aria-hidden="true"></i>
+          <span data-add-label>Tambah</span>
+        </button>
+      </div>
+    </article>
+  </template>
+
+  <template id="tpl-skeleton">
+    <div class="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200/80">
+      <div class="skeleton aspect-[4/3] rounded-none"></div>
+      <div class="space-y-2 p-3 sm:p-4">
+        <div class="skeleton h-3.5 w-4/5"></div>
+        <div class="skeleton h-3 w-3/5"></div>
+        <div class="skeleton mt-3 h-5 w-2/5"></div>
+        <div class="skeleton mt-2 h-9 w-full"></div>
+      </div>
+    </div>
+  </template>
+
+  <template id="tpl-cart-item">
+    <li class="flex gap-3 border-b border-slate-100 py-3 last:border-0">
+      <div class="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-slate-100">
+        <img data-img class="h-full w-full object-cover" loading="lazy" decoding="async" referrerpolicy="no-referrer" alt="" />
+        <span data-img-fallback class="absolute inset-0 hidden items-center justify-center text-slate-400">
+          <i class="fa-solid fa-image" aria-hidden="true"></i>
+        </span>
+      </div>
+
+      <div class="min-w-0 flex-1">
+        <p data-name class="truncate text-sm font-bold text-slate-900"></p>
+        <p data-meta class="mt-0.5 text-[11px] text-slate-500"></p>
+
+        <div class="mt-2 flex items-center gap-1.5">
+          <button type="button" data-action="dec" aria-label="Kurangi jumlah"
+                  class="grid h-7 w-7 place-items-center rounded-lg border border-slate-200 text-slate-600 transition hover:border-brand-300 hover:text-brand-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-600">
+            <i class="fa-solid fa-minus text-[10px]" aria-hidden="true"></i>
+          </button>
+          <span data-qty class="min-w-6 text-center text-xs font-bold text-slate-800"></span>
+          <button type="button" data-action="inc" aria-label="Tambah jumlah"
+                  class="grid h-7 w-7 place-items-center rounded-lg border border-slate-200 text-slate-600 transition hover:border-brand-300 hover:text-brand-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-600">
+            <i class="fa-solid fa-plus text-[10px]" aria-hidden="true"></i>
+          </button>
+          <button type="button" data-action="remove"
+                  class="ml-auto rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-rose-500">
+            Hapus
+          </button>
+        </div>
+      </div>
+
+      <p data-total class="shrink-0 self-start text-xs font-bold text-slate-900"></p>
+    </li>
+  </template>
+
+  <!-- ===================== SCRIPTS ===================== -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+  <script src="js/config.js" defer></script>
+  <script src="js/app.js" defer></script>
+</body>
+</html>
