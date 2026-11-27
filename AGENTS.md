@@ -13,7 +13,13 @@ js/config.js          # CONFIG, CATEGORIES, escapeHTML, formatRupiah, …
 js/app.js             # Phase 2-3: ApiService / Store / UI / App modules
 admin.html            # Phase 4: admin panel shell (login + dashboard markup)
 js/admin.js           # Phase 4: AdminApi / AdminStore / AdminUI / AdminApp
+CHANGELOG.md          # Keep a Changelog + SemVer; one entry per phase
 ```
+
+`CHANGELOG.md` is the release-facing record. Add an entry under `[Unreleased]`
+as work lands, and move it into a new version block when a phase is finished —
+`0.x` minor bumps per phase, `1.0.0` once the site runs against a production
+Supabase project.
 
 ## Hard rules
 
